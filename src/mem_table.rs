@@ -5,6 +5,7 @@ use bytes::Bytes;
 use anyhow::{Result};
 use crossbeam_skiplist::map::Entry;
 use crossbeam_skiplist::SkipMap;
+use crate::wal::Wal;
 
 pub struct MemTable {
     map: Arc<SkipMap<Bytes, Bytes>>,
@@ -13,12 +14,18 @@ pub struct MemTable {
     // since it provide better performance. Also, the reason for using Arc is that we have to share
     // this between threads, and AtomicUsize does not implement Copy or Clone trait, so we cannot
     // move it into other thread. So, we use Arc<AtomicUsize> instead to have multiple ownerships
-    pub(crate) approximate_size: Arc<AtomicUsize>
+    pub(crate) approximate_size: Arc<AtomicUsize>,
+    wal: Option<Wal>
 }
 
 impl MemTable {
-    pub(crate) fn create() {
-
+    pub fn create(id: usize) -> Self {
+        Self {
+            id,
+            map: Arc::new(SkipMap::new()),
+            wal: None,
+            approximate_size: Arc::new(AtomicUsize::new(0)),
+        }
     }
 
     pub(crate) fn get(self: &Self, key: Bytes) -> Option<Bytes> {

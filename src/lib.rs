@@ -5,3 +5,4 @@ mod compact;
 mod block;
 mod manifest;
 mod mvcc;
+mod wal;

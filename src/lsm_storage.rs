@@ -85,9 +85,21 @@ impl LsmStorageInner {
         self.try_freeze_memtable(size)
     }
 
+    pub fn delete(&self, key: &[u8]) -> Result<()> {
+        assert!(!key.is_empty(), "key cannot be empty");
+        let size;
+        {
+            let guard = self.state.read()?;
+            guard.memtable.put(key, b"")?;
+            size = guard.memtable.approximate_size();
+        }
+        self.try_freeze(size)?;
+        Ok(())
+    }
+
     fn try_freeze_memtable(&self, size: usize) -> Result<()> {
         if size > self.config.target_sst_size {
-            let state_lock = self.state_lock.lock()?;
+            let _state_lock = self.state_lock.lock()?;
             let guard = self.state.read()?;
             // the reason for recheck is that is the case that there are two threads already executing
             // the try_freeze_memtable function in put function, and the first thread may lock the state_lock
@@ -96,13 +108,29 @@ impl LsmStorageInner {
             // get the approximate_size again.
             if guard.memtable.approximate_size() > self.config.target_sst_size {
                 drop(guard);
-                self.freeze_memtable()
+                self.freeze_memtable()?
             }
         }
+        Ok(())
     }
 
-    fn freeze_memtable() {
+    fn freeze_memtable(&self) -> Result<()> {
+        let new_memtable_id = self.next_sstable_id();
+        let new_memtable = MemTable::create(new_memtable_id);
+        {
+            let guard = self.state.write()?;
+            // guard itself is a pointer that points to the Arc pointer that points to the real data
+            // on heap
+            let mut snapshot = Arc::clone(&*guard);
+            let old_memtable = std::mem::replace(&mut snapshot, new_memtable);
+            snapshot.immut_memtable.push(old_memtable);
+            *guard = snapshot;
+        }
+        Ok(())
+    }
 
+    pub(crate) fn next_sst_id(&self) -> usize {
+        self.next_sstable_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 }
 
