@@ -6,3 +6,4 @@ mod block;
 mod manifest;
 mod mvcc;
 mod wal;
+mod iterator;

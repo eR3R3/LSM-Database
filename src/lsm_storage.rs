@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use anyhow::{Result};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc};
+use parking_lot::{RwLock, Mutex};
 use std::sync::atomic::AtomicUsize;
 use bytes::Bytes;
 use crate::block::Block;
@@ -53,10 +54,10 @@ pub struct LsmStorageInner {
 impl LsmStorageInner {
     // it is only currently getting from the memtables
     fn get(&self, key: &[u8]) -> Result<Option<Bytes>> {
-        let guard = self.state.read()?;
+        let guard = self.state.read();
         let snapshot = guard;
 
-        if let Some(value) = snapshot.memtable.get(Bytes::from(key)) {
+        if let Some(value) = snapshot.memtable.get(Bytes::copy_from_slice(key)) {
             if value.is_empty() {
                 return Ok(None)
             }
@@ -64,7 +65,7 @@ impl LsmStorageInner {
         }
 
         for memtable in snapshot.immut_memtable.iter() {
-            if let Some(value) = memtable.get(Bytes::from(key)) {
+            if let Some(value) = memtable.get(Bytes::copy_from_slice(key)) {
                 if value.is_empty() {
                     return Ok(None)
                 }
@@ -78,7 +79,7 @@ impl LsmStorageInner {
         assert!(!key.is_empty(), "key cannot be empty");
         assert!(!value.is_empty(), "value cannot be empty");
 
-        let guard = self.state.read()?;
+        let guard = self.state.read();
         guard.memtable.put(key, value)?;
         let size = guard.memtable.approximate_size();
 
@@ -89,18 +90,18 @@ impl LsmStorageInner {
         assert!(!key.is_empty(), "key cannot be empty");
         let size;
         {
-            let guard = self.state.read()?;
+            let guard = self.state.read();
             guard.memtable.put(key, b"")?;
             size = guard.memtable.approximate_size();
         }
-        self.try_freeze(size)?;
+        self.try_freeze_memtable(size)?;
         Ok(())
     }
 
     fn try_freeze_memtable(&self, size: usize) -> Result<()> {
         if size > self.config.target_sst_size {
-            let _state_lock = self.state_lock.lock()?;
-            let guard = self.state.read()?;
+            let _state_lock = self.state_lock.lock();
+            let guard = self.state.read();
             // the reason for recheck is that is the case that there are two threads already executing
             // the try_freeze_memtable function in put function, and the first thread may lock the state_lock
             // first and the second thread will wait until the state_lock is unlock, and execute,
@@ -115,16 +116,19 @@ impl LsmStorageInner {
     }
 
     fn freeze_memtable(&self) -> Result<()> {
-        let new_memtable_id = self.next_sstable_id();
-        let new_memtable = MemTable::create(new_memtable_id);
+        let new_memtable_id = self.next_sst_id();
+        let new_memtable = Arc::new(MemTable::create(new_memtable_id));
         {
-            let guard = self.state.write()?;
+            let mut guard = self.state.write();
             // guard itself is a pointer that points to the Arc pointer that points to the real data
             // on heap
-            let mut snapshot = Arc::clone(&*guard);
-            let old_memtable = std::mem::replace(&mut snapshot, new_memtable);
-            snapshot.immut_memtable.push(old_memtable);
-            *guard = snapshot;
+            // the reason I want to use guard.as_ref() is to get the reference of the underlying data T
+            // inside of Arc<T>, and .clone() is to get the underlying data that T points to on the heap
+            // to pass it into the std::mem::replace() function
+            let mut snapshot = guard.as_ref().clone();
+            let old_memtable = std::mem::replace(&mut snapshot.memtable, new_memtable);
+            snapshot.immut_memtable.insert(0, old_memtable);
+            *guard = Arc::new(snapshot);
         }
         Ok(())
     }
