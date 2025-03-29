@@ -81,7 +81,7 @@ impl MemTable {
 type SkipMapRangeIter<'a> = crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
 
 #[self_referencing]
-struct MemTableIterator {
+pub struct MemTableIterator {
     map: Arc<SkipMap<Bytes, Bytes>>,
     #[borrows(map)]
     #[not_covariant]
