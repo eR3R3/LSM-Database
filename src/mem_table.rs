@@ -1,5 +1,3 @@
-use std::io::SeekFrom;
-use std::iter::Skip;
 use std::ops::Bound;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -44,6 +42,8 @@ impl MemTable {
         let range = (map_bound(low_bound), map_bound(upper_bound));
         let mut iter = MemTableIteratorBuilder {
             map: self.map.clone(),
+            // since iter rely on map, I need to take map as a parameter, and .range just returns
+            // an iterator
             iter_builder: |map| map.range(range),
             item: (Bytes::new(), Bytes::new())
         }.build();
