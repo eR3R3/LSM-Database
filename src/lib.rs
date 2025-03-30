@@ -7,3 +7,4 @@ mod manifest;
 mod mvcc;
 mod wal;
 mod iterator;
+mod lsm_iterator;
