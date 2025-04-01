@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Bound;
 use std::path::PathBuf;
 use anyhow::{Result};
 use std::sync::{Arc};
@@ -7,6 +8,8 @@ use std::sync::atomic::AtomicUsize;
 use bytes::Bytes;
 use crate::block::Block;
 use crate::compact::{CompactionController, CompactionOption};
+use crate::iterator::merge_iterator::MergeIterator;
+use crate::lsm_iterator::{FusedIterator, LsmIterator};
 use crate::manifest::Manifest;
 use crate::mem_table::MemTable;
 use crate::mvcc::LsmMvccInner;
@@ -16,6 +19,8 @@ pub type BlockCache = moka::sync::Cache<(usize, usize), Arc<Block>>;
 
 #[derive(Clone)]
 pub struct LsmStorageState {
+    // I use Arc here since it can offer fast read by just cloning it without occupy the RwLock
+    // for a long time, optimizing the concurrency efficiency.
     memtable: Arc<MemTable>,
     immut_memtable: Vec<Arc<MemTable>>,
     l0_sstables: Vec<usize>,
@@ -135,6 +140,26 @@ impl LsmStorageInner {
 
     pub(crate) fn next_sst_id(&self) -> usize {
         self.next_sstable_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Create an iterator over a range of keys.
+    pub fn scan(
+        &self,
+        lower: Bound<&[u8]>,
+        upper: Bound<&[u8]>,
+    ) -> Result<FusedIterator<LsmIterator>> {
+        let snapshot = {
+            let guard = self.state.read();
+            Arc::clone(&guard)
+        }; // drop global lock here
+
+        let mut memtable_iters = Vec::with_capacity(snapshot.immut_memtable.len() + 1);
+        memtable_iters.push(Box::new(snapshot.memtable.scan(lower, upper)));
+        for memtable in snapshot.immut_memtable.iter() {
+            memtable_iters.push(Box::new(memtable .scan(lower, upper)));
+        }
+        let iter = MergeIterator::create(memtable_iters);
+        Ok(FusedIterator::new(LsmIterator::new(iter)?))
     }
 }
 

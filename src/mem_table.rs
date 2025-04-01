@@ -41,6 +41,7 @@ impl MemTable {
     pub(crate) fn scan(&self, low_bound: Bound<&[u8]>, upper_bound: Bound<&[u8]>) -> MemTableIterator {
         let range = (map_bound(low_bound), map_bound(upper_bound));
         let mut iter = MemTableIteratorBuilder {
+            // this is Arc, so it is efficient
             map: self.map.clone(),
             // since iter rely on map, I need to take map as a parameter, and .range just returns
             // an iterator

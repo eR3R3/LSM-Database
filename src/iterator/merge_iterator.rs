@@ -41,7 +41,7 @@ pub struct MergeIterator<T: StorageIterator> {
 }
 
 impl<T: StorageIterator> MergeIterator<T> {
-    fn create(iters: Vec<Box<T>>) -> Self {
+    pub(crate) fn create(iters: Vec<Box<T>>) -> Self {
         if iters.is_empty() {
             return Self {
                 iters: BinaryHeap::new(),
