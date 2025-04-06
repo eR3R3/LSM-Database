@@ -40,7 +40,6 @@ impl StorageIterator for LsmIterator {
     fn value(&self) -> &[u8] {
         self.inner.value()
     }
-
     fn is_valid(&self) -> bool {
         self.inner.is_valid()
     }
