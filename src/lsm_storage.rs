@@ -25,7 +25,7 @@ pub struct LsmStorageState {
     immut_memtable: Vec<Arc<MemTable>>,
     l0_sstables: Vec<usize>,
     levels: Vec<(usize, Vec<usize>)>,
-    sstables: HashMap<usize, SsTable>
+    sstables: HashMap<usize, Arc<SsTable>>
 }
 
 pub struct LsmStorageConfig {

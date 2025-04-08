@@ -5,7 +5,7 @@ pub use builder::BlockBuilder;
 use bytes::{Buf, BufMut, Bytes};
 pub use iterator::BlockIterator;
 
-pub(crate) const SIZEOF_U16: usize = std::mem::size_of::<u16>();
+pub(crate) const SIZEOF_U16: usize = size_of::<u16>();
 
 /// A block is the smallest unit of read and caching in LSM tree. It is a collection of sorted
 /// key-value pairs.
@@ -15,6 +15,8 @@ pub struct Block {
 }
 
 impl Block {
+    /// the encoded block has overall structure like
+    /// | key_len | key | value_len | value | ... | offset for first key-value pair | ... | len of all the offsets(the number of key-value pair) |
     pub fn encode(&self) -> Bytes {
         let mut buf = self.data.clone();
         let offsets_len = self.offsets.len();

@@ -1,9 +1,14 @@
+mod builder;
+mod iterator;
+
 use std::fs::File;
+use std::io::Read;
 use std::os::unix::fs::FileExt;
 use std::path::Path;
 use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
 use anyhow::Result;
+use crate::block::Block;
 use crate::lsm_storage::BlockCache;
 
 pub struct BlockMeta {
@@ -13,6 +18,9 @@ pub struct BlockMeta {
 }
 
 impl BlockMeta {
+    // the block_meta are the slice of all the meta infos for all the block data, and the buf
+    // right here should already include the block data section, this function is used in SsTableBuilder::build
+    // function
     pub fn encode_block_meta(block_meta: &[BlockMeta], buf: &mut Vec<u8>) {
         let mut estimated_size = 0;
         for meta in block_meta {
@@ -98,7 +106,7 @@ pub struct SsTable {
     /// The actual storage unit of SsTable, the format is as above.
     file: FileObject,
     /// The meta blocks that hold info for data blocks.
-    block_metas: Vec<BlockMeta>,
+    block_meta: Vec<BlockMeta>,
     /// The offset that indicates the start point of meta blocks in `file`.
     block_meta_offset: usize,
     id: usize,
@@ -106,3 +114,46 @@ pub struct SsTable {
     first_key: Bytes,
     last_key: Bytes,
 }
+
+impl SsTable {
+    fn open(file_object: FileObject, block_cache: Option<Arc<BlockCache>>, id: usize) -> Result<Self> {
+        let block_meta_offset_raw = file_object.read(file_object.size() - 4, 4)?;
+        // the reason why I use get_u32 is that it only actually occupies 4 bytes.
+        let block_meta_offset = (&block_meta_offset_raw[..]).get_u32() as u64;
+        let block_metas_raw = file_object.read(block_meta_offset, (file_object.size() - 4 - block_meta_offset) as u32)?;
+        let block_meta = BlockMeta::decode_block_meta(&block_metas_raw[..]);
+        Ok(Self {
+            file: file_object,
+            first_key: block_meta.first().unwrap().first_key.clone(),
+            last_key: block_meta.last().unwrap().last_key.clone(),
+            block_meta,
+            block_meta_offset: block_meta_offset as usize,
+            id,
+            block_cache,
+        })
+    }
+
+    /// Create a mock SST with only first key + last key metadata
+    pub fn create_meta_only(id: usize, file_size: u64, first_key: Bytes, last_key: Bytes) -> Self {
+        Self {
+            file: FileObject(None, file_size),
+            block_meta: vec![],
+            block_meta_offset: 0,
+            id,
+            block_cache: None,
+            first_key,
+            last_key,
+        }
+    }
+
+    fn read_block(&self, idx: usize) -> Result<Arc<Block>> {
+        // the idx HAVE to be usize
+        let offset = self.block_meta[idx].offset;
+        let next_block_offset = self.block_meta.get(idx + 1)
+            // self.block_meta_offset is the first index of the block meta section
+            .map_or(self.block_meta_offset, |x| x.offset);;
+        let length = next_block_offset - offset;
+        let block_data = self.file.read(offset as u64, length as u32)?;
+        Ok(Arc::new(Block::decode(&block_data[..])))
+    }
+ }
