@@ -7,7 +7,7 @@ use std::os::unix::fs::FileExt;
 use std::path::Path;
 use std::sync::Arc;
 use bytes::{Buf, BufMut, Bytes};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crate::block::Block;
 use crate::lsm_storage::BlockCache;
 
@@ -146,6 +146,9 @@ impl SsTable {
         }
     }
 
+    // the right way to think about this is
+    // to get the raw data from the file then decode it
+    // to make sure that it does not decode the whole thing and make the whole thing on memory
     fn read_block(&self, idx: usize) -> Result<Arc<Block>> {
         // the idx HAVE to be usize
         let offset = self.block_meta[idx].offset;
@@ -156,4 +159,21 @@ impl SsTable {
         let block_data = self.file.read(offset as u64, length as u32)?;
         Ok(Arc::new(Block::decode(&block_data[..])))
     }
- }
+
+    fn read_block_cache(&self, block_idx: usize) -> Result<Arc<Block>> {
+        if let Some(block_cache) = self.block_cache.clone() {
+            let cached_data = block_cache
+                // the reason it takes in a closure
+                // 如果直接传入普通函数，而不是闭包，普通函数就没有捕获外部变量的能力
+                // ，也就无法像闭包那样消耗 key，也不会在缓存缺失时控制重复读取
+                // and the reason I do not use ? but use .map_err()? is that
+                // the Error type .try_get_with() returns is not anyhow::Error type
+                // so we need to use anyhow!() macro to convert it
+                .try_get_with((self.id, block_idx), || self.read_block(block_idx))
+                .map_err( |err| anyhow!("{}", err))?;
+            Ok(cached_data)
+        } else {
+            self.read_block(block_idx)
+        }
+    }
+}

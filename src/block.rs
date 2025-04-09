@@ -16,6 +16,7 @@ pub struct Block {
 
 impl Block {
     /// the encoded block has overall structure like
+    /// |              data section               |            offset section             |                                                      |
     /// | key_len | key | value_len | value | ... | offset for first key-value pair | ... | len of all the offsets(the number of key-value pair) |
     pub fn encode(&self) -> Bytes {
         let mut buf = self.data.clone();
