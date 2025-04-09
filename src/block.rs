@@ -1,6 +1,7 @@
 mod builder;
 mod iterator;
 
+use std::sync::Arc;
 pub use builder::BlockBuilder;
 use bytes::{Buf, BufMut, Bytes};
 pub use iterator::BlockIterator;

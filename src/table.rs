@@ -176,4 +176,16 @@ impl SsTable {
             self.read_block(block_idx)
         }
     }
+
+    fn find_block_idx(&self, key: &[u8]) -> usize {
+        // .partition_point() is the binary search method that returns the first one
+        // that satisfy the condition
+        self.block_meta.partition_point(|meta| {
+            meta.first_key <= key
+        }).saturating_sub(1)
+    }
+
+    fn num_of_blocks(&self) -> usize {
+        self.block_meta.len()
+    }
 }

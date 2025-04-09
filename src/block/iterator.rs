@@ -4,10 +4,10 @@ use bytes::Buf;
 use crate::block::{Block, SIZEOF_U16};
 
 pub struct BlockIterator {
-    block: Arc<Block>,
-    key: Vec<u8>,
-    value_range: (usize, usize),
-    idx: usize,
+    pub(crate) block: Arc<Block>,
+    pub(crate) key: Vec<u8>,
+    pub(crate) value_range: (usize, usize),
+    pub(crate) idx: usize,
 }
 
 impl BlockIterator {
