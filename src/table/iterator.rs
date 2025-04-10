@@ -77,24 +77,34 @@ impl SsTableIterator {
 }
 
 impl StorageIterator for SsTableIterator {
-    /// Move to the next `key` in the block.
-    /// Note: You may want to check if the current block iterator is valid after the move.
+    // Note: You may want to check if the current block iterator is valid after the move.
     fn next(&mut self) -> Result<()> {
-        unimplemented!()
+        self.block_iter.next();
+        if !self.block_iter.is_valid() {
+            self.block_idx += 1;
+            if self.block_idx < self.table.num_of_blocks() {
+                let block = self.table.read_block_cache(self.block_idx)?;
+                let block_iterator = BlockIterator::create_and_seek_to_first(block);
+                self.block_iter = block_iterator;
+            } else {
+                // we should deal with the error of no things left right here
+            }
+        }
+        Ok(())
     }
 
-    /// Return the `key` that's held by the underlying block iterator.
+    // Return the `key` that's held by the underlying block iterator.
     fn key(&self) -> &[u8] {
-        unimplemented!()
+        self.block_iter.key()
     }
 
-    /// Return the `value` that's held by the underlying block iterator.
+    // Return the `value` that's held by the underlying block iterator.
     fn value(&self) -> &[u8] {
-        unimplemented!()
+        self.block_iter.value()
     }
 
-    /// Return whether the current block iterator is valid or not.
+    // Return whether the current block iterator is valid or not.
     fn is_valid(&self) -> bool {
-        unimplemented!()
+        self.block_iter.is_valid()
     }
 }

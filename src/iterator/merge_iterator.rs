@@ -13,7 +13,7 @@ impl<T: StorageIterator> PartialEq for HeapWrapper<T> {
     }
 }
 
-// this is a marker trait that do not have any function to implement
+// this is a marker trait that do not have sany function to implement
 impl<T: StorageIterator> Eq for HeapWrapper<T> {}
 
 impl<T: StorageIterator> PartialOrd for HeapWrapper<T> {
