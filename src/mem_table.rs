@@ -77,7 +77,7 @@ impl MemTable {
 // 2. the reason I use Arc to wrap the original skipmap is that we need the ownership to move one thing
 // into another thread, also, it is efficient to clone Arc.
 // 3. the reason I use self-reference is that the Rust compiler cannot make sure the skipmap always
-// exist when I try to use the iterator that points to it. (Note we can also use 'a here, but it can be
+// exist when I try to use the iterator that points to it. (Note we can also use 'a here, but it can
 // become quite complicated)
 type SkipMapRangeIter<'a> = crossbeam_skiplist::map::Range<'a, Bytes, (Bound<Bytes>, Bound<Bytes>), Bytes, Bytes>;
 

@@ -74,26 +74,44 @@ impl<T: StorageIterator> MergeIterator<T> {
 }
 
 impl<T: StorageIterator> StorageIterator for MergeIterator<T> {
+    // the right way to think about this is just:
+    // keys in iter1: a, c, d;
+    // keys in iter2: a, b, c;
+    // keys in iter3: b, c ,d;
+    // since iter1 is the most recent mem_table iterator, we take a from iter1, detect that the next iter
+    // has the equal, then call .next() for iter2, then call .next() for the current iterator
+    // the situation will turn into this:
+    // keys in iter1: c, d;
+    // keys in iter2: b, c;
+    // keys in iter3: b, c ,d;
+    // but the binary heap will keep the order for you, so the real one is like this:
+    // keys in iter2: b, c;
+    // keys in iter3: b, c ,d;
+    // keys in iter1: c, d;
+    // then we can take b
     fn next(&mut self) -> anyhow::Result<()> {
         let current = self.current.as_mut().unwrap();
-        // Pop the item out of the heap if they have the same value.
+        // Pop the item out of the heap if they have the same value using while.
         while let Some(mut inner_iter) = self.iters.peek_mut() {
             debug_assert!(
                 inner_iter.1.key() >= current.1.key(),
                 "heap invariant violated"
             );
             if inner_iter.1.key() == current.1.key() {
-                // Case 1: an error occurred when calling `next`.
+                // call next in the mem_table iterator that is coming up since they have the
+                // same key
                 if let e @ Err(_) = inner_iter.1.next() {
                     PeekMut::pop(inner_iter);
                     return e;
                 }
 
-                // Case 2: iter is no longer valid.
+                // deal with it when iter is no longer valid.
                 if !inner_iter.1.is_valid() {
                     PeekMut::pop(inner_iter);
                 }
             } else {
+                // break the loop when something with bigger key appears
+                // it maybe from a different mem_table iterator
                 break;
             }
         }
